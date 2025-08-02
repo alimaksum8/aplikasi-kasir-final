@@ -1,10 +1,15 @@
 [build]
   functions = "netlify/functions"
 
-# Konfigurasi tambahan untuk stabilitas function
+# Konfigurasi untuk semua functions
 [functions]
   node_bundler = "esbuild"
   included_files = ["!node_modules/@sparticuz/chromium/bin/**"]
+
+# Konfigurasi SPESIFIK untuk function generate-pdf
+# Menambahkan timeout ke 26 detik
+[functions."generate-pdf"]
+  timeout = 26
 
 [[redirects]]
   from = "/api/*"
