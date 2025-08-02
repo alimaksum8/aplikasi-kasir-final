@@ -279,23 +279,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('modal-container').innerHTML = '';
     };
 
-    const getReceiptHTML = (transaction) => {
-        const employee = state.employees.find(e => e.id == transaction.employeeId);
-        // Convert timestamp to string if it's a Date object
-        const transactionData = {
-            ...transaction,
-            timestamp: transaction.timestamp.toLocaleString('id-ID')
-        };
-        return JSON.stringify(transactionData); // Pass data as JSON
-    };
-
-    const handlePrint = async (transactionOrTransactions) => {
+    const handlePrint = async (transactionOrTransactions, event) => {
         const button = event.target.closest('button');
+        const originalButtonContent = button.innerHTML;
         button.disabled = true;
-        button.innerHTML = `<div class="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-t-transparent"></div> Mencetak...`;
+        button.innerHTML = `<div class="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-t-transparent border-white"></div> Mencetak...`;
 
         try {
-            const response = await fetch('/.netlify/functions/generate-pdf', {
+            // PERBAIKAN: Gunakan URL /api/ sesuai netlify.toml
+            const response = await fetch('/api/generate-pdf', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -305,7 +297,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                throw new Error(`Server error: ${response.statusText}`);
+                let errorMessage;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const errorData = await response.json();
+                    errorMessage = errorData.details || errorData.error || 'Unknown server error';
+                } else {
+                    errorMessage = `Server error (Status: ${response.status}). Cek log Netlify Function untuk detail.`;
+                }
+                throw new Error(errorMessage);
             }
 
             const pdfBlob = await response.blob();
@@ -314,13 +314,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Gagal membuat PDF:', error);
-            alert('Gagal membuat PDF. Silakan coba lagi.');
+            alert(`Gagal membuat PDF: ${error.message}`);
         } finally {
             button.disabled = false;
-            button.innerHTML = `<div class="w-5 h-5 mr-2">${icons.printer}</div> Cetak Struk`;
-            if (document.getElementById('btn-print-all')) {
-                 document.getElementById('btn-print-all').innerHTML = `<div class="w-4 h-4 mr-2">${icons.printer}</div>Cetak Semua`;
-            }
+            button.innerHTML = originalButtonContent;
         }
     };
 
@@ -449,9 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.closest('#btn-process-payment')) handlePayment();
         if (printReceiptBtn) {
             const transactionData = JSON.parse(printReceiptBtn.dataset.transaction);
-            // Re-hydrate date object
-            transactionData.timestamp = new Date(transactionData.timestamp);
-            handlePrint(transactionData);
+            handlePrint(transactionData, e);
         }
         if (viewReceiptBtn) {
             const trxId = parseInt(viewReceiptBtn.dataset.id, 10);
@@ -474,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('#btn-print-receipt').dataset.transaction = JSON.stringify(transaction);
         }
         if (printAllBtn) {
-            handlePrint(state.transactions);
+            handlePrint(state.transactions, e);
         }
     });
 
@@ -518,148 +513,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
-```
-
-### 2. Netlify Function (`netlify/functions/generate-pdf.js`)
-
-Buat folder `netlify` di dalam proyek Anda, lalu di dalamnya buat lagi folder `functions`. Simpan file ini di sana.
-
-
-```javascript
-// Harap install dependensi: npm install puppeteer-core chrome-aws-lambda
-const puppeteer = require('puppeteer-core');
-const chrome = require('chrome-aws-lambda');
-
-// Helper function untuk format Rupiah
-const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
-
-// Fungsi untuk membuat HTML satu struk
-const createReceiptHTML = (transaction, employees) => {
-    const employee = employees.find(e => e.id == transaction.employeeId);
-    // Pastikan timestamp adalah string
-    const timestampString = typeof transaction.timestamp === 'string' ? transaction.timestamp : new Date(transaction.timestamp).toLocaleString('id-ID');
-
-    return `
-        <div class="receipt-container" style="font-family: 'Courier New', monospace; font-size: 10pt; width: 80mm; padding: 5mm; box-sizing: border-box; page-break-after: always;">
-            <div style="text-align: center; margin-bottom: 10px;">
-                <h3 style="margin: 0; font-size: 14pt;">Warung Serbaguna</h3>
-                <p style="margin: 0; font-size: 8pt;">Jl. Merdeka No. 123</p>
-                <p style="margin: 0; font-size: 8pt;">Terima Kasih</p>
-            </div>
-            <div style="border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 5px 0; margin: 5px 0; font-size: 9pt;">
-                <p style="margin: 2px 0;">ID: ${transaction.receiptId}</p>
-                <p style="margin: 2px 0;">Waktu: ${timestampString}</p>
-                <p style="margin: 2px 0;">Kasir: ${employee ? employee.name : 'N/A'}</p>
-            </div>
-            <table style="width: 100%; font-size: 9pt; border-collapse: collapse;">
-                <tbody>
-                    ${transaction.items.map(item => `
-                        <tr>
-                            <td style="padding: 2px 0; vertical-align: top; text-align: left;">${item.name} (${item.quantity}x)</td>
-                            <td style="padding: 2px 0; vertical-align: top; text-align: right;">${formatRupiah(item.price * item.quantity)}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-            <div style="border-top: 1px dashed black; margin-top: 5px; padding-top: 5px; font-size: 9pt;">
-                <div style="display: flex; justify-content: space-between; font-weight: bold;"><span>Total</span><span>${formatRupiah(transaction.total)}</span></div>
-                <div style="display: flex; justify-content: space-between;"><span>Tunai</span><span>${formatRupiah(transaction.payment)}</span></div>
-                <div style="display: flex; justify-content: space-between;"><span>Kembali</span><span>${formatRupiah(transaction.change)}</span></div>
-            </div>
-            <div style="text-align: center; margin-top: 10px; font-size: 8pt;">
-                <p>--- Layanan Pelanggan: 0812-3456-7890 ---</p>
-            </div>
-        </div>
-    `;
-};
-
-exports.handler = async function (event, context) {
-  try {
-    // 1. Ambil data dari body request
-    const { transactions, employees } = JSON.parse(event.body);
-
-    if (!transactions || !employees || transactions.length === 0) {
-        return { statusCode: 400, body: 'Data transaksi tidak lengkap.' };
-    }
-
-    // 2. Gabungkan HTML untuk semua struk
-    const allReceiptsHTML = transactions.map(trx => createReceiptHTML(trx, employees)).join('');
-    const finalHTML = `<html><head><style>.receipt-container:last-child { page-break-after: auto; }</style></head><body>${allReceiptsHTML}</body></html>`;
-
-    // 3. Gunakan Puppeteer untuk membuat PDF
-    const browser = await puppeteer.launch({
-      args: chrome.args,
-      executablePath: await chrome.executablePath,
-      headless: chrome.headless,
-    });
-    const page = await browser.newPage();
-    await page.setContent(finalHTML, { waitUntil: 'networkidle0' });
-    
-    // Opsi untuk ukuran kertas thermal printer 80mm
-    const pdfBuffer = await page.pdf({
-        width: '80mm',
-        printBackground: true,
-        margin: { top: 0, right: 0, bottom: 0, left: 0 }
-    });
-
-    await browser.close();
-
-    // 4. Kirim PDF kembali sebagai respons
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename="struk.pdf"'
-      },
-      body: pdfBuffer.toString('base64'),
-      isBase64Encoded: true,
-    };
-  } catch (error) {
-    console.error("Error generating PDF:", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Gagal membuat PDF.", details: error.message }),
-    };
-  }
-};
-```
-
-### 3. File Konfigurasi (`package.json`)
-
-File ini mendefinisikan dependensi yang dibutuhkan oleh Netlify Function. Simpan file ini di folder utama proyek Anda.
-
-
-```json
-{
-  "name": "aplikasi-kasir-netlify",
-  "version": "1.0.0",
-  "description": "Aplikasi kasir dengan PDF generation di Netlify",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "chrome-aws-lambda": "^10.1.0",
-    "puppeteer-core": "^10.4.0"
-  }
-}
-```
-
-### 4. File Konfigurasi Netlify (`netlify.toml`)
-
-File ini memberitahu Netlify di mana menemukan *functions* Anda. Simpan file ini di folder utama proyek Anda.
-
-
-```toml
-[build]
-  functions = "netlify/functions"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-```
-
-Dengan semua file ini, Anda sekarang memiliki proyek yang siap untuk di-*deploy* ke Netlify. Setelah di-*deploy*, fungsi cetak akan memanggil *serverless function* untuk menghasilkan file PDF yang bersih dan profesion
