@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Kasir</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="flex h-screen bg-gray-100">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="bg-gray-800 text-gray-300 w-64 transition-all duration-300 ease-in-out flex flex-col">
+            <div class="h-16 flex items-center justify-center border-b border-gray-700">
+                <h1 id="sidebar-title" class="text-xl font-bold text-white">POS Kasir</h1>
+                <div id="sidebar-icon" class="hidden w-8 h-8 text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>
+                </div>
+            </div>
+            <nav id="nav-menu" class="flex-1 px-2 py-4 space-y-2">
+                <!-- Nav items will be injected here by JS -->
+            </nav>
+        </aside>
+
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="bg-white shadow-md h-16 flex items-center justify-between px-6 flex-shrink-0">
+                <button id="sidebar-toggle" class="text-gray-600 hover:text-gray-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                </button>
+                <div class="flex items-center space-x-4">
+                    <span id="current-date" class="text-sm text-gray-500"></span>
+                    <div class="relative">
+                        <button class="flex items-center space-x-2">
+                            <img class="h-8 w-8 rounded-full object-cover" src="https://placehold.co/40x40/EBF4FF/7684A3?text=A" alt="Admin"/>
+                            <span class="text-sm font-medium text-gray-700">Admin</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+                <div id="page-dashboard" class="page active"></div>
+                <div id="page-kasir" class="page"></div>
+                <div id="page-tambah-produk" class="page"></div>
+                <div id="page-tambah-karyawan" class="page"></div>
+                <div id="page-pengeluaran" class="page"></div>
+                <div id="page-riwayat" class="page"></div>
+                <div id="page-rekap" class="page"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4"></div>
+    
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- STATE MANAGEMENT ---
+    let state = {
+        currentPage: 'dashboard',
+        isSidebarOpen: true,
+        products: [
+            { id: 1, name: 'Es Teh Manis', price: 5000, type: 'barang' },
+            { id: 2, name: 'Nasi Goreng', price: 15000, type: 'barang' },
+            { id: 3, name: 'Pulsa 10k', price: 12000, type: 'pulsa' },
+            { id: 4, name: 'Token 20k', price: 22000, type: 'token' },
+        ],
+        employees: [
+            { id: 1, name: 'Admin' },
+            { id: 2, name: 'Kasir 1' },
+        ],
+        transactions: [],
+        expenses: [],
+        cart: [],
+        kasir: {
+            searchTerm: '',
+            payment: '',
+            selectedEmployee: 1,
+        }
+    };
+
+    // --- ICONS ---
+    const icons = {
+        dashboard: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`,
+        kasir: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`,
+        produk: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>`,
+        penjualan: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`,
+        karyawan: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+        pengeluaran: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+        laporan: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+        plus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+        minus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+        trash: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
+        printer: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>`,
+    };
+
+    const navItems = [
+        { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard }, { id: 'kasir', label: 'Kasir', icon: icons.kasir }, { id: 'tambah-produk', label: 'Produk', icon: icons.produk }, { id: 'riwayat', label: 'Penjualan', icon: icons.penjualan }, { id: 'tambah-karyawan', label: 'Karyawan', icon: icons.karyawan }, { id: 'pengeluaran', label: 'Pengeluaran', icon: icons.pengeluaran }, { id: 'rekap', label: 'Laporan', icon: icons.laporan },
+    ];
+    
+    // --- RENDER FUNCTIONS ---
+    const renderNav = () => {
+        const navMenu = document.getElementById('nav-menu');
+        navMenu.innerHTML = navItems.map(item => `
+            <button data-page="${item.id}" class="nav-button w-full flex items-center px-4 py-2.5 rounded-lg transition-colors duration-200 ${state.currentPage === item.id ? 'bg-green-600 text-white' : 'hover:bg-gray-700 hover:text-white'}">
+                <div class="w-5 h-5 mr-3">${item.icon}</div><span class="nav-text font-medium ${!state.isSidebarOpen && 'hidden'}">${item.label}</span>
+            </button>`).join('');
+    };
+
+    const renderDashboard = () => {
+        const page = document.getElementById('page-dashboard');
+        const menuItems = [
+            { id: 'kasir', label: 'Kasir', icon: icons.kasir }, { id: 'tambah-produk', label: 'Produk', icon: icons.produk }, { id: 'riwayat', label: 'Penjualan', icon: icons.penjualan }, { id: 'rekap', label: 'Laporan', icon: icons.laporan }, { id: 'tambah-karyawan', label: 'Karyawan', icon: icons.karyawan }, { id: 'pengeluaran', label: 'Pengeluaran', icon: icons.pengeluaran },
+        ];
+        page.innerHTML = `
+            <h1 class="text-3xl font-bold text-gray-800">Dashboard</h1><div class="border-b-4 border-green-500 w-24 my-2"></div>
+            <div class="mt-6"><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-xl font-semibold text-gray-700 mb-4">MENU</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                ${menuItems.map(item => `
+                    <button data-page="${item.id}" class="dashboard-menu-button bg-gray-50 p-6 rounded-lg text-center text-gray-600 hover:bg-green-500 hover:text-white hover:shadow-lg transition-all duration-300">
+                        <div class="w-10 h-10 mx-auto mb-2">${item.icon}</div><span class="font-semibold text-sm">${item.label}</span>
+                    </button>`).join('')}
+                </div>
+            </div></div>
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
+                <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow-md"><h2 class="text-xl font-semibold text-gray-700 mb-4">Bagan Penjualan (Contoh)</h2><div class="h-64 bg-gray-100 rounded-md flex items-center justify-center"><div class="w-16 h-16 text-gray-300">${icons.laporan}</div><p class="ml-4 text-gray-400">Data grafik akan ditampilkan di sini</p></div></div>
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md"><h2 class="text-xl font-semibold text-gray-700 mb-4">Produk Utama (Contoh)</h2><div class="h-64 bg-gray-100 rounded-md flex items-center justify-center"><svg class="w-16 h-16 text-gray-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-5H6v-2h5V7l5 5-5 5z"/></svg><p class="ml-4 text-gray-400">Grafik pai akan di sini</p></div></div>
+            </div>`;
+    };
+    
+    const renderKasir = () => {
+        const page = document.getElementById('page-kasir');
+        const employeeOptions = state.employees.map(emp => `<option value="${emp.id}" ${state.kasir.selectedEmployee == emp.id ? 'selected' : ''}>${emp.name}</option>`).join('');
+        page.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Kasir</h2><div class="mb-4 flex gap-4"><input id="kasir-search" type="text" placeholder="Cari produk..." value="${state.kasir.searchTerm}" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" /><select id="kasir-employee" class="p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">${employeeOptions}</select></div><div id="kasir-product-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto p-2"></div></div><div id="kasir-cart-container" class="bg-white p-6 rounded-lg shadow-md self-start"></div></div>`;
+        renderKasirProductList();
+        renderKasirCart();
+    };
+
+    const renderKasirProductList = () => {
+        const productList = document.getElementById('kasir-product-list');
+        if (!productList) return;
+        const filteredProducts = state.products.filter(p => p.name.toLowerCase().includes(state.kasir.searchTerm.toLowerCase()));
+        productList.innerHTML = filteredProducts.map(p => `<button data-product-id="${p.id}" class="add-to-cart-btn bg-white border border-gray-200 rounded-lg p-4 text-center hover:shadow-xl hover:border-green-500 transition-all duration-200"><div class="font-semibold text-gray-700 truncate">${p.name}</div><div class="text-sm text-green-600 font-bold">${formatRupiah(p.price)}</div></button>`).join('');
+    };
+
+    const renderKasirCart = () => {
+        const cartContainer = document.getElementById('kasir-cart-container');
+        if (!cartContainer) return;
+        const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const cartContent = state.cart.length === 0 ? `<p class="text-gray-500">Keranjang masih kosong.</p>` : state.cart.map(item => `<div class="flex justify-between items-center mb-3 pb-3 border-b"><div><p class="font-semibold text-gray-700">${item.name}</p><p class="text-sm text-gray-500">${formatRupiah(item.price)}</p></div><div class="flex items-center gap-2"><button class="cart-quantity-btn text-red-500 hover:text-red-700" data-product-id="${item.id}" data-change="-1"><div class="w-5 h-5">${icons.minus}</div></button><span class="w-8 text-center font-medium">${item.quantity}</span><button class="cart-quantity-btn text-green-500 hover:text-green-700" data-product-id="${item.id}" data-change="1"><div class="w-5 h-5">${icons.plus}</div></button></div></div>`).join('');
+        const paymentSection = state.cart.length > 0 ? `<div class="mt-6 pt-4 border-t-2 border-dashed"><div class="flex justify-between items-center text-xl font-bold"><span>Total:</span><span>${formatRupiah(total)}</span></div><button id="btn-bayar" class="w-full mt-4 bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors">Bayar</button></div>` : '';
+        cartContainer.innerHTML = `<h2 class="text-2xl font-bold mb-4 flex items-center text-gray-800"><div class="w-6 h-6 mr-2">${icons.penjualan}</div> Keranjang</h2><div class="max-h-[40vh] overflow-y-auto pr-2">${cartContent}</div>${paymentSection}`;
+    };
+
+    const renderTambahProduk = () => {
+        const page = document.getElementById('page-tambah-produk');
+        page.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Tambah Produk Baru</h2><form id="form-add-product" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Produk</label><input name="name" type="text" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Contoh: Es Teh Manis" required /></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Harga</label><input name="price" type="number" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Contoh: 5000" required /></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Tipe Produk</label><select name="type" class="w-full p-3 border border-gray-300 rounded-lg bg-white"><option value="barang">Barang Fisik</option><option value="pulsa">Pulsa</option><option value="token">Token Listrik</option></select></div><button type="submit" class="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">Tambah Produk</button></form></div><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Daftar Produk</h2><div class="max-h-[60vh] overflow-y-auto" id="product-list-container"></div></div></div>`;
+        renderProductList();
+    };
+
+    const renderProductList = () => {
+        const container = document.getElementById('product-list-container');
+        if(!container) return;
+        container.innerHTML = `<table class="w-full text-left"><thead><tr class="border-b"><th class="p-2">Nama</th><th class="p-2">Harga</th><th class="p-2">Tipe</th><th class="p-2">Aksi</th></tr></thead><tbody>${state.products.map(p => `<tr class="border-b hover:bg-gray-50"><td class="p-2">${p.name}</td><td class="p-2">${formatRupiah(p.price)}</td><td class="p-2 capitalize">${p.type}</td><td class="p-2"><button class="delete-product-btn text-red-500 hover:text-red-700" data-id="${p.id}"><div class="w-5 h-5">${icons.trash}</div></button></td></tr>`).join('')}</tbody></table>`;
+    };
+    
+    const renderTambahKaryawan = () => {
+        const page = document.getElementById('page-tambah-karyawan');
+        page.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Tambah Karyawan Baru</h2><form id="form-add-employee" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Karyawan</label><input name="name" type="text" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Contoh: Budi" required /></div><button type="submit" class="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">Tambah Karyawan</button></form></div><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Daftar Karyawan</h2><div class="max-h-[60vh] overflow-y-auto" id="employee-list-container"></div></div></div>`;
+        renderEmployeeList();
+    };
+
+    const renderEmployeeList = () => {
+        const container = document.getElementById('employee-list-container');
+        if(!container) return;
+        container.innerHTML = `<ul>${state.employees.map(emp => `<li class="flex justify-between items-center p-3 border-b hover:bg-gray-50"><span class="text-gray-800">${emp.name}</span><button class="delete-employee-btn text-red-500 hover:text-red-700" data-id="${emp.id}"><div class="w-5 h-5">${icons.trash}</div></button></li>`).join('')}</ul>`;
+    };
+
+    const renderPengeluaran = () => {
+        const page = document.getElementById('page-pengeluaran');
+        const employeeOptions = state.employees.map(emp => `<option value="${emp.id}">${emp.name}</option>`).join('');
+        page.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Catat Pengeluaran</h2><form id="form-add-expense" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><input name="description" type="text" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Contoh: Beli Gas" required /></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Jumlah</label><input name="amount" type="number" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Contoh: 25000" required /></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Dicatat oleh</label><select name="employeeId" class="w-full p-3 border border-gray-300 rounded-lg bg-white">${employeeOptions}</select></div><button type="submit" class="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">Simpan Pengeluaran</button></form></div><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Riwayat Pengeluaran</h2><div class="max-h-[60vh] overflow-y-auto" id="expense-list-container"></div></div></div>`;
+        renderExpenseList();
+    };
+
+    const renderExpenseList = () => {
+        const container = document.getElementById('expense-list-container');
+        if(!container) return;
+        const sortedExpenses = [...state.expenses].sort((a, b) => b.timestamp - a.timestamp);
+        container.innerHTML = `<ul>${sortedExpenses.map(exp => { const employee = state.employees.find(e => e.id == exp.employeeId); return `<li class="flex justify-between items-center p-3 border-b hover:bg-gray-50"><div><p class="font-semibold text-gray-800">${exp.description}</p><p class="text-sm text-gray-500">${exp.timestamp.toLocaleDateString('id-ID')} - oleh ${employee ? employee.name : 'N/A'}</p></div><span class="font-bold text-red-600">${formatRupiah(exp.amount)}</span></li>`; }).join('')}</ul>`;
+    };
+
+    const renderRiwayatStruk = () => {
+        const page = document.getElementById('page-riwayat');
+        page.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-2xl font-bold text-gray-800">Riwayat Penjualan</h2><button id="btn-print-all" class="flex items-center bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm ${state.transactions.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${state.transactions.length === 0 ? 'disabled' : ''}><div class="w-4 h-4 mr-2">${icons.printer}</div>Cetak Semua</button></div><div class="max-h-[75vh] overflow-y-auto" id="transaction-list-container"></div></div>`;
+        renderTransactionList();
+    };
+
+    const renderTransactionList = () => {
+        const container = document.getElementById('transaction-list-container');
+        if(!container) return;
+        const sortedTransactions = [...state.transactions].sort((a,b) => b.timestamp - a.timestamp);
+        container.innerHTML = `<table class="w-full text-left"><thead class="bg-gray-50 sticky top-0"><tr class="border-b"><th class="p-3">Waktu</th><th class="p-3">ID Struk</th><th class="p-3">Total</th><th class="p-3">Kasir</th><th class="p-3">Aksi</th></tr></thead><tbody>${sortedTransactions.map(trx => { const employee = state.employees.find(e => e.id == trx.employeeId); return `<tr class="border-b hover:bg-gray-50"><td class="p-3">${trx.timestamp.toLocaleString('id-ID')}</td><td class="p-3">${trx.receiptId}</td><td class="p-3 font-semibold">${formatRupiah(trx.total)}</td><td class="p-3">${employee ? employee.name : 'N/A'}</td><td class="p-3"><button class="view-receipt-btn bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm" data-id="${trx.id}">Lihat Struk</button></td></tr>`; }).join('')}</tbody></table>`;
+    };
+
+    const renderRekapLaporan = () => {
+        const page = document.getElementById('page-rekap');
+        const today = new Date();
+        const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
+        const endOfDay = new Date(new Date().setHours(23, 59, 59, 999));
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        
+        const dailyTransactions = state.transactions.filter(t => t.timestamp >= startOfDay && t.timestamp <= endOfDay);
+        const dailyExpenses = state.expenses.filter(e => e.timestamp >= startOfDay && e.timestamp <= endOfDay);
+        const monthlyTransactions = state.transactions.filter(t => t.timestamp >= startOfMonth && t.timestamp <= endOfDay);
+        const monthlyExpenses = state.expenses.filter(e => e.timestamp >= startOfMonth && e.timestamp <= endOfDay);
+
+        const dailyData = { sales: dailyTransactions.reduce((sum, t) => sum + t.total, 0), expenses: dailyExpenses.reduce((sum, e) => sum + e.amount, 0), transactions: dailyTransactions.length };
+        const monthlyData = { sales: monthlyTransactions.reduce((sum, t) => sum + t.total, 0), expenses: monthlyExpenses.reduce((sum, e) => sum + e.amount, 0), transactions: monthlyTransactions.length };
+        const dailyNet = dailyData.sales - dailyData.expenses;
+        const monthlyNet = monthlyData.sales - monthlyData.expenses;
+        
+        page.innerHTML = `<div class="space-y-6"><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Rekap Harian (${new Date().toLocaleDateString('id-ID')})</h2><div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center"><div class="bg-blue-100 p-4 rounded-lg"><p class="text-sm text-blue-800 font-semibold">Total Penjualan</p><p class="text-2xl font-bold text-blue-900">${formatRupiah(dailyData.sales)}</p><p class="text-xs text-blue-700">${dailyData.transactions} transaksi</p></div><div class="bg-red-100 p-4 rounded-lg"><p class="text-sm text-red-800 font-semibold">Total Pengeluaran</p><p class="text-2xl font-bold text-red-900">${formatRupiah(dailyData.expenses)}</p></div><div class="bg-green-100 p-4 rounded-lg"><p class="text-sm text-green-800 font-semibold">Pendapatan Bersih</p><p class="text-2xl font-bold ${dailyNet >= 0 ? 'text-green-900' : 'text-red-900'}">${formatRupiah(dailyNet)}</p></div></div></div><div class="bg-white p-6 rounded-lg shadow-md"><h2 class="text-2xl font-bold mb-4 text-gray-800">Rekap Bulanan (${new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' })})</h2><div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center"><div class="bg-blue-100 p-4 rounded-lg"><p class="text-sm text-blue-800 font-semibold">Total Penjualan</p><p class="text-2xl font-bold text-blue-900">${formatRupiah(monthlyData.sales)}</p><p class="text-xs text-blue-700">${monthlyData.transactions} transaksi</p></div><div class="bg-red-100 p-4 rounded-lg"><p class="text-sm text-red-800 font-semibold">Total Pengeluaran</p><p class="text-2xl font-bold text-red-900">${formatRupiah(monthlyData.expenses)}</p></div><div class="bg-green-100 p-4 rounded-lg"><p class="text-sm text-green-800 font-semibold">Pendapatan Bersih</p><p class="text-2xl font-bold ${monthlyNet >= 0 ? 'text-green-900' : 'text-red-900'}">${formatRupiah(monthlyNet)}</p></div></div></div></div>`;
+    };
+
+    // --- HELPER FUNCTIONS ---
+    const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+
+    const showPage = (pageId) => {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(`page-${pageId}`).classList.add('active');
+        state.currentPage = pageId;
+        
+        switch(pageId) {
+            case 'dashboard': renderDashboard(); break;
+            case 'kasir': renderKasir(); break;
+            case 'tambah-produk': renderTambahProduk(); break;
+            case 'tambah-karyawan': renderTambahKaryawan(); break;
+            case 'pengeluaran': renderPengeluaran(); break;
+            case 'riwayat': renderRiwayatStruk(); break;
+            case 'rekap': renderRekapLaporan(); break;
+        }
+        renderNav();
+    };
+
+    const showModal = (content) => {
+        const modalContainer = document.getElementById('modal-container');
+        modalContainer.innerHTML = `<div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md relative">${content}</div>`;
+        modalContainer.classList.remove('hidden');
+    };
+
+    const hideModal = () => {
+        document.getElementById('modal-container').classList.add('hidden');
+        document.getElementById('modal-container').innerHTML = '';
+    };
+
+    const getReceiptHTML = (transaction) => {
+        const employee = state.employees.find(e => e.id == transaction.employeeId);
+        // Convert timestamp to string if it's a Date object
+        const transactionData = {
+            ...transaction,
+            timestamp: transaction.timestamp.toLocaleString('id-ID')
+        };
+        return JSON.stringify(transactionData); // Pass data as JSON
+    };
+
+    const handlePrint = async (transactionOrTransactions) => {
+        const button = event.target.closest('button');
+        button.disabled = true;
+        button.innerHTML = `<div class="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-t-transparent"></div> Mencetak...`;
+
+        try {
+            const response = await fetch('/.netlify/functions/generate-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transactions: Array.isArray(transactionOrTransactions) ? transactionOrTransactions : [transactionOrTransactions],
+                    employees: state.employees
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.statusText}`);
+            }
+
+            const pdfBlob = await response.blob();
+            const url = URL.createObjectURL(pdfBlob);
+            window.open(url, '_blank');
+
+        } catch (error) {
+            console.error('Gagal membuat PDF:', error);
+            alert('Gagal membuat PDF. Silakan coba lagi.');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = `<div class="w-5 h-5 mr-2">${icons.printer}</div> Cetak Struk`;
+            if (document.getElementById('btn-print-all')) {
+                 document.getElementById('btn-print-all').innerHTML = `<div class="w-4 h-4 mr-2">${icons.printer}</div>Cetak Semua`;
+            }
+        }
+    };
+
+    // --- EVENT HANDLERS ---
+    const handleSidebarToggle = () => {
+        state.isSidebarOpen = !state.isSidebarOpen;
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('w-64', state.isSidebarOpen);
+        sidebar.classList.toggle('w-20', !state.isSidebarOpen);
+        document.getElementById('sidebar-title').classList.toggle('hidden', !state.isSidebarOpen);
+        document.getElementById('sidebar-icon').classList.toggle('hidden', state.isSidebarOpen);
+        document.querySelectorAll('.nav-text').forEach(text => text.classList.toggle('hidden', !state.isSidebarOpen));
+    };
+
+    const handlePayment = () => {
+        const paymentAmount = parseFloat(state.kasir.payment);
+        const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        if (isNaN(paymentAmount) || paymentAmount < total) {
+            alert("Jumlah pembayaran tidak cukup!");
+            return;
+        }
+
+        const transaction = {
+            id: Date.now(),
+            receiptId: `TRX-${Date.now()}`,
+            items: [...state.cart],
+            total: total,
+            payment: paymentAmount,
+            change: paymentAmount - total,
+            employeeId: state.kasir.selectedEmployee,
+            timestamp: new Date(),
+        };
+        state.transactions.push(transaction);
+        state.cart = [];
+        state.kasir.payment = '';
+        
+        hideModal();
+        renderKasirCart();
+        
+        const employee = state.employees.find(e => e.id == transaction.employeeId);
+        const receiptPreviewHTML = `
+            <div class="receipt-preview font-mono text-xs p-2 border rounded-lg">
+                <div class="text-center mb-2"><h3 class="text-lg font-bold">Warung Serbaguna</h3><p class="text-xs">Jl. Merdeka No. 123</p></div>
+                <div class="border-t border-b border-dashed py-1 my-1 text-xs"><p>ID: ${transaction.receiptId}</p><p>Waktu: ${transaction.timestamp.toLocaleString('id-ID')}</p><p>Kasir: ${employee ? employee.name : 'N/A'}</p></div>
+                <table class="w-full text-xs"><tbody>${transaction.items.map(item => `<tr><td class="py-0.5">${item.name} (${item.quantity}x)</td><td class="text-right py-0.5">${formatRupiah(item.price * item.quantity)}</td></tr>`).join('')}</tbody></table>
+                <div class="border-t border-dashed mt-1 pt-1 text-xs"><div class="flex justify-between font-bold"><span>Total</span><span>${formatRupiah(transaction.total)}</span></div></div>
+            </div>`;
+
+        showModal(`
+            ${receiptPreviewHTML}
+            <div class="mt-6 flex gap-4">
+                <button id="btn-print-receipt" class="w-full flex justify-center items-center bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors"><div class="w-5 h-5 mr-2">${icons.printer}</div> Cetak Struk</button>
+                <button id="btn-close-modal" class="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-colors">Tutup</button>
+            </div>
+        `);
+        document.querySelector('#btn-print-receipt').dataset.transaction = JSON.stringify(transaction);
+    };
+
+    // --- INITIALIZATION & EVENT LISTENERS ---
+    document.getElementById('current-date').textContent = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    renderNav();
+    showPage('dashboard');
+
+    document.getElementById('sidebar-toggle').addEventListener('click', handleSidebarToggle);
+    
+    document.body.addEventListener('click', (e) => {
+        const navButton = e.target.closest('.nav-button');
+        const dashboardButton = e.target.closest('.dashboard-menu-button');
+        const deleteProductBtn = e.target.closest('.delete-product-btn');
+        const deleteEmployeeBtn = e.target.closest('.delete-employee-btn');
+        const addToCartBtn = e.target.closest('.add-to-cart-btn');
+        const quantityBtn = e.target.closest('.cart-quantity-btn');
+        const bayarBtn = e.target.closest('#btn-bayar');
+        const closeModalBtn = e.target.closest('#btn-close-modal');
+        const printReceiptBtn = e.target.closest('#btn-print-receipt');
+        const viewReceiptBtn = e.target.closest('.view-receipt-btn');
+        const printAllBtn = e.target.closest('#btn-print-all');
+
+        if (navButton) showPage(navButton.dataset.page);
+        if (dashboardButton) showPage(dashboardButton.dataset.page);
+        if (closeModalBtn) hideModal();
+
+        if (deleteProductBtn) {
+            const productId = parseInt(deleteProductBtn.dataset.id, 10);
+            if (confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
+                state.products = state.products.filter(p => p.id !== productId);
+                alert('Produk berhasil dihapus!');
+                renderProductList();
+            }
+        }
+        if (deleteEmployeeBtn) {
+            const employeeId = parseInt(deleteEmployeeBtn.dataset.id, 10);
+            if (confirm('Apakah Anda yakin ingin menghapus karyawan ini?')) {
+                state.employees = state.employees.filter(p => p.id !== employeeId);
+                alert('Karyawan berhasil dihapus!');
+                renderEmployeeList();
+            }
+        }
+        if (addToCartBtn) {
+            const productId = parseInt(addToCartBtn.dataset.productId, 10);
+            const product = state.products.find(p => p.id === productId);
+            const cartItem = state.cart.find(item => item.id === productId);
+            if (cartItem) cartItem.quantity++;
+            else state.cart.push({ ...product, quantity: 1 });
+            renderKasirCart();
+        }
+        if (quantityBtn) {
+            const productId = parseInt(quantityBtn.dataset.productId, 10);
+            const change = parseInt(quantityBtn.dataset.change, 10);
+            const itemIndex = state.cart.findIndex(item => item.id === productId);
+            if (itemIndex > -1) {
+                state.cart[itemIndex].quantity += change;
+                if (state.cart[itemIndex].quantity <= 0) state.cart.splice(itemIndex, 1);
+            }
+            renderKasirCart();
+        }
+        if (bayarBtn) {
+            const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            showModal(`
+                <h3 class="text-2xl font-bold mb-4">Pembayaran</h3>
+                <div class="mb-4 text-lg">Total Belanja: <span class="font-bold">${formatRupiah(total)}</span></div>
+                <input id="payment-input" type="number" placeholder="Jumlah Uang Tunai" class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-green-500" autofocus />
+                <button id="btn-process-payment" class="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors">Proses Pembayaran</button>
+            `);
+        }
+        if (e.target.closest('#btn-process-payment')) handlePayment();
+        if (printReceiptBtn) {
+            const transactionData = JSON.parse(printReceiptBtn.dataset.transaction);
+            // Re-hydrate date object
+            transactionData.timestamp = new Date(transactionData.timestamp);
+            handlePrint(transactionData);
+        }
+        if (viewReceiptBtn) {
+            const trxId = parseInt(viewReceiptBtn.dataset.id, 10);
+            const transaction = state.transactions.find(t => t.id === trxId);
+            const employee = state.employees.find(e => e.id == transaction.employeeId);
+            const receiptPreviewHTML = `
+            <div class="receipt-preview font-mono text-xs p-2 border rounded-lg">
+                <div class="text-center mb-2"><h3 class="text-lg font-bold">Warung Serbaguna</h3><p class="text-xs">Jl. Merdeka No. 123</p></div>
+                <div class="border-t border-b border-dashed py-1 my-1 text-xs"><p>ID: ${transaction.receiptId}</p><p>Waktu: ${transaction.timestamp.toLocaleString('id-ID')}</p><p>Kasir: ${employee ? employee.name : 'N/A'}</p></div>
+                <table class="w-full text-xs"><tbody>${transaction.items.map(item => `<tr><td class="py-0.5">${item.name} (${item.quantity}x)</td><td class="text-right py-0.5">${formatRupiah(item.price * item.quantity)}</td></tr>`).join('')}</tbody></table>
+                <div class="border-t border-dashed mt-1 pt-1 text-xs"><div class="flex justify-between font-bold"><span>Total</span><span>${formatRupiah(transaction.total)}</span></div></div>
+            </div>`;
+            showModal(`
+                ${receiptPreviewHTML}
+                <div class="mt-6 flex gap-4">
+                    <button id="btn-print-receipt" class="w-full flex justify-center items-center bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors"><div class="w-5 h-5 mr-2">${icons.printer}</div> Cetak Struk</button>
+                    <button id="btn-close-modal" class="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-colors">Tutup</button>
+                </div>
+            `);
+            document.querySelector('#btn-print-receipt').dataset.transaction = JSON.stringify(transaction);
+        }
+        if (printAllBtn) {
+            handlePrint(state.transactions);
+        }
+    });
+
+    document.body.addEventListener('submit', (e) => {
+        if (e.target.id === 'form-add-product') {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            state.products.push({ id: Date.now(), name: formData.get('name'), price: parseFloat(formData.get('price')), type: formData.get('type') });
+            alert('Produk berhasil ditambahkan!');
+            e.target.reset();
+            renderProductList();
+        }
+        if (e.target.id === 'form-add-employee') {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            state.employees.push({ id: Date.now(), name: formData.get('name') });
+            alert('Karyawan berhasil ditambahkan!');
+            e.target.reset();
+            renderEmployeeList();
+        }
+        if (e.target.id === 'form-add-expense') {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            state.expenses.push({ id: Date.now(), description: formData.get('description'), amount: parseFloat(formData.get('amount')), employeeId: parseInt(formData.get('employeeId'), 10), timestamp: new Date() });
+            alert('Pengeluaran berhasil dicatat!');
+            e.target.reset();
+            renderExpenseList();
+        }
+    });
+
+    document.body.addEventListener('input', (e) => {
+        if (e.target.id === 'kasir-search') state.kasir.searchTerm = e.target.value; renderKasirProductList();
+        if (e.target.id === 'payment-input') state.kasir.payment = e.target.value;
+    });
+
+    document.body.addEventListener('change', (e) => {
+        if (e.target.id === 'kasir-employee') state.kasir.selectedEmployee = parseInt(e.target.value, 10);
+    });
+});
+</script>
+
+</body>
+</html>
+```
+
+### 2. Netlify Function (`netlify/functions/generate-pdf.js`)
+
+Buat folder `netlify` di dalam proyek Anda, lalu di dalamnya buat lagi folder `functions`. Simpan file ini di sana.
+
+
+```javascript
+// Harap install dependensi: npm install puppeteer-core chrome-aws-lambda
+const puppeteer = require('puppeteer-core');
+const chrome = require('chrome-aws-lambda');
+
+// Helper function untuk format Rupiah
+const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+
+// Fungsi untuk membuat HTML satu struk
+const createReceiptHTML = (transaction, employees) => {
+    const employee = employees.find(e => e.id == transaction.employeeId);
+    // Pastikan timestamp adalah string
+    const timestampString = typeof transaction.timestamp === 'string' ? transaction.timestamp : new Date(transaction.timestamp).toLocaleString('id-ID');
+
+    return `
+        <div class="receipt-container" style="font-family: 'Courier New', monospace; font-size: 10pt; width: 80mm; padding: 5mm; box-sizing: border-box; page-break-after: always;">
+            <div style="text-align: center; margin-bottom: 10px;">
+                <h3 style="margin: 0; font-size: 14pt;">Warung Serbaguna</h3>
+                <p style="margin: 0; font-size: 8pt;">Jl. Merdeka No. 123</p>
+                <p style="margin: 0; font-size: 8pt;">Terima Kasih</p>
+            </div>
+            <div style="border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 5px 0; margin: 5px 0; font-size: 9pt;">
+                <p style="margin: 2px 0;">ID: ${transaction.receiptId}</p>
+                <p style="margin: 2px 0;">Waktu: ${timestampString}</p>
+                <p style="margin: 2px 0;">Kasir: ${employee ? employee.name : 'N/A'}</p>
+            </div>
+            <table style="width: 100%; font-size: 9pt; border-collapse: collapse;">
+                <tbody>
+                    ${transaction.items.map(item => `
+                        <tr>
+                            <td style="padding: 2px 0; vertical-align: top; text-align: left;">${item.name} (${item.quantity}x)</td>
+                            <td style="padding: 2px 0; vertical-align: top; text-align: right;">${formatRupiah(item.price * item.quantity)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            <div style="border-top: 1px dashed black; margin-top: 5px; padding-top: 5px; font-size: 9pt;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold;"><span>Total</span><span>${formatRupiah(transaction.total)}</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>Tunai</span><span>${formatRupiah(transaction.payment)}</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>Kembali</span><span>${formatRupiah(transaction.change)}</span></div>
+            </div>
+            <div style="text-align: center; margin-top: 10px; font-size: 8pt;">
+                <p>--- Layanan Pelanggan: 0812-3456-7890 ---</p>
+            </div>
+        </div>
+    `;
+};
+
+exports.handler = async function (event, context) {
+  try {
+    // 1. Ambil data dari body request
+    const { transactions, employees } = JSON.parse(event.body);
+
+    if (!transactions || !employees || transactions.length === 0) {
+        return { statusCode: 400, body: 'Data transaksi tidak lengkap.' };
+    }
+
+    // 2. Gabungkan HTML untuk semua struk
+    const allReceiptsHTML = transactions.map(trx => createReceiptHTML(trx, employees)).join('');
+    const finalHTML = `<html><head><style>.receipt-container:last-child { page-break-after: auto; }</style></head><body>${allReceiptsHTML}</body></html>`;
+
+    // 3. Gunakan Puppeteer untuk membuat PDF
+    const browser = await puppeteer.launch({
+      args: chrome.args,
+      executablePath: await chrome.executablePath,
+      headless: chrome.headless,
+    });
+    const page = await browser.newPage();
+    await page.setContent(finalHTML, { waitUntil: 'networkidle0' });
+    
+    // Opsi untuk ukuran kertas thermal printer 80mm
+    const pdfBuffer = await page.pdf({
+        width: '80mm',
+        printBackground: true,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 }
+    });
+
+    await browser.close();
+
+    // 4. Kirim PDF kembali sebagai respons
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="struk.pdf"'
+      },
+      body: pdfBuffer.toString('base64'),
+      isBase64Encoded: true,
+    };
+  } catch (error) {
+    console.error("Error generating PDF:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Gagal membuat PDF.", details: error.message }),
+    };
+  }
+};
+```
+
+### 3. File Konfigurasi (`package.json`)
+
+File ini mendefinisikan dependensi yang dibutuhkan oleh Netlify Function. Simpan file ini di folder utama proyek Anda.
+
+
+```json
+{
+  "name": "aplikasi-kasir-netlify",
+  "version": "1.0.0",
+  "description": "Aplikasi kasir dengan PDF generation di Netlify",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chrome-aws-lambda": "^10.1.0",
+    "puppeteer-core": "^10.4.0"
+  }
+}
+```
+
+### 4. File Konfigurasi Netlify (`netlify.toml`)
+
+File ini memberitahu Netlify di mana menemukan *functions* Anda. Simpan file ini di folder utama proyek Anda.
+
+
+```toml
+[build]
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+```
+
+Dengan semua file ini, Anda sekarang memiliki proyek yang siap untuk di-*deploy* ke Netlify. Setelah di-*deploy*, fungsi cetak akan memanggil *serverless function* untuk menghasilkan file PDF yang bersih dan profesion
