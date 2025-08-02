@@ -1,6 +1,11 @@
 [build]
   functions = "netlify/functions"
 
+# Konfigurasi tambahan untuk stabilitas function
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["!node_modules/@sparticuz/chromium/bin/**"]
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
