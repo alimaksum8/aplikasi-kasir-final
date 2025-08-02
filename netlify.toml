@@ -1,5 +1,8 @@
 [build]
   functions = "netlify/functions"
+  # Menambahkan environment untuk build yang stabil
+  [build.environment]
+    NODE_VERSION = "18"
 
 # Konfigurasi untuk semua functions
 [functions]
