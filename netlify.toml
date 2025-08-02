@@ -7,9 +7,10 @@
   included_files = ["!node_modules/@sparticuz/chromium/bin/**"]
 
 # Konfigurasi SPESIFIK untuk function generate-pdf
-# Menambahkan timeout ke 26 detik
+# Menambahkan timeout dan alokasi memori
 [functions."generate-pdf"]
   timeout = 26
+  memory = 1024
 
 [[redirects]]
   from = "/api/*"
